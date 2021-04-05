@@ -5,6 +5,60 @@ using System.Threading;
 
 namespace ServerCore
 {
+    #region SpinLock
+
+    class cSpinLock
+    {
+        volatile int _locked = 0;
+
+        public void Acquire()
+        {
+            while (true)
+            {
+                //int original = Interlocked.Exchange(ref _locked, 1);
+                //if (original == 0)
+                //    break;
+
+                // CAS (Compare-And-Swap)
+                int expected = 0;
+                int desired = 1;
+                int original = Interlocked.CompareExchange(ref _locked, desired, expected);
+                if (original == expected)
+                    break;
+
+                // 다른 스레드에게 스케쥴링을 양보한다!
+                Thread.Yield();
+            }
+
+        }
+
+        public void Release()
+        {
+            _locked = 0;
+        }
+    }
+
+    #endregion
+
+    #region Event
+
+    class CLock
+    {
+        AutoResetEvent _available = new AutoResetEvent(true);
+
+        public void Acquire()
+        {
+            _available.WaitOne();   // 입장 시도!
+        }
+
+        public void Release()
+        {
+            _available.Set();
+        }
+    }
+
+    #endregion
+
     // 재귀적 락을 허용할지 (Yes)
     // 스핀락 정책 (5000번 -> Yield)
     class MyCustomLock
@@ -20,57 +74,56 @@ namespace ServerCore
 
         public void WriteLock()
         {
-            int _lockThreadId = (_flag & WRITE_MASK) >> 16;
-            if(Thread.CurrentThread.ManagedThreadId == _lockThreadId)
+            // 동일 스레드가 WriteLock을 이미 획득하고 있는지 확인
+            int lockThread = ((_flag & WRITE_MASK) >> 16);
+            if(Thread.CurrentThread.ManagedThreadId == lockThread)
             {
-                ++_writeCount;
-                return;
+                _writeCount++;
+                return; 
             }
 
-            // 아무도 WriteLock or ReadLock을 획득하고 있지 않을 때, 경합해서 소유권을 얻는다
-            int desired = (Thread.CurrentThread.ManagedThreadId << 16) & WRITE_MASK;
+            int desired = ((Thread.CurrentThread.ManagedThreadId << 16) & WRITE_MASK);
 
-            while(true)
+            for(int i = 0; i < MAX_SPIN_COUNT; ++i)
             {
-                for(int i = 0; i<MAX_SPIN_COUNT; ++i)
+                // 시도를 성공하면 return
+                if(Interlocked.CompareExchange(ref _flag, desired, EMPTY_FLAG) == EMPTY_FLAG)
                 {
-                    // 원자성 보장을 위해 InterLock으로 체크합니다.
-                    // 반환 값은 바꾸기 이전 값!
-                    if (Interlocked.CompareExchange(ref _flag, desired, EMPTY_FLAG) == EMPTY_FLAG)
-                    {
-                        _writeCount = 1;
-                        return;
-                    }
+                    _writeCount = 1;
+                    return;
                 }
-
-                Thread.Yield();
             }
+
+            Thread.Yield();
         }
 
         public void WriteUnLock()
         {
             int lockCount = --_writeCount;
-            if(lockCount == 0)
+            if(lockCount <= 0)
                 Interlocked.Exchange(ref _flag, EMPTY_FLAG);
         }
 
         public void ReadLock()
         {
-            int _lockThreadId = (_flag & WRITE_MASK) >> 16;
-            if (Thread.CurrentThread.ManagedThreadId == _lockThreadId)
+            // 동일 스레드가 WriteLock을 이미 획득하고 있는지 확인
+            int lockThread = ((_flag & WRITE_MASK) >> 16);
+            if (Thread.CurrentThread.ManagedThreadId == lockThread)
             {
                 Interlocked.Increment(ref _flag);
                 return;
             }
 
-            // 아무도 WriteLock을 획득하지 않았다면 ReadCount를 늘린다.
+            // 아무도 WriteLock을 획득하고 있지 않으면, ReadCount를 1 늘린다.
             while (true)
             {
                 for (int i = 0; i < MAX_SPIN_COUNT; ++i)
                 {
                     int expected = (_flag & READ_MASK);
                     if (Interlocked.CompareExchange(ref _flag, expected + 1, expected) == expected)
+                    {
                         return;
+                    }
                 }
 
                 Thread.Yield();
