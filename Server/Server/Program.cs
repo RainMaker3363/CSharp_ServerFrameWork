@@ -8,55 +8,7 @@ using ServerCore;
 
 namespace Server
 {
-    class Packet
-    {
-        public ushort size;
-        public ushort packetid;
-    }
 
-    class GameSession : PacketSession
-    {
-        public override void OnConnected(EndPoint endPoint)
-        {
-            Console.WriteLine($"OnCennected {endPoint}");
-
-            //Packet packet = new Packet() { size = 100, packetid = 10 };
-
-            //ArraySegment<byte> openSegment = SendBufferHelper.Open(4096);
-            //byte[] Buffer = BitConverter.GetBytes(packet.size); //Encoding.UTF8.GetBytes("Welcome to MMORPG Server !");
-            //byte[] Buffer2 = BitConverter.GetBytes(packet.packetid);//Encoding.UTF8.GetBytes("Hello Server !");
-
-            //Array.Copy(Buffer, 0, openSegment.Array, openSegment.Offset, Buffer.Length);
-            //Array.Copy(Buffer2, 0, openSegment.Array, openSegment.Offset + Buffer.Length, Buffer2.Length);
-
-            //ArraySegment<byte> sendBuff = SendBufferHelper.Close(Buffer.Length + Buffer2.Length);
-
-            //Send(sendBuff);
-            
-            Thread.Sleep(5000);
-
-            Disconnect();
-        }
-
-        public override void OnRecvPacket(ArraySegment<byte> _buffer)
-        {
-            ushort size = BitConverter.ToUInt16(_buffer.Array, _buffer.Offset);
-            ushort id = BitConverter.ToUInt16(_buffer.Array, _buffer.Offset + sizeof(ushort));
-
-            Console.WriteLine($"Recv Packet ID : {id}, Size {size}");
-        }
-
-        public override void OnSend(int numOfByte)
-        {
-            Console.WriteLine($"Transferred Bytes : {numOfByte}");
-        }
-
-        public override void OnDisconnected(EndPoint endPoint)
-        {
-            Console.WriteLine($"OnDisconnected {endPoint}");
-        }
-
-    }
 
     class Program
     {
@@ -64,13 +16,16 @@ namespace Server
 
         static void Main(string[] args)
         {
+            // 사용할 패킷들을 저장합니다.
+            PacketManager.Instance.Register();
+
             // DNS 서버를 가지고 옵니다.
             string host = Dns.GetHostName();
             IPHostEntry ipHost = Dns.GetHostEntry(host);
             IPAddress ipAddr = ipHost.AddressList[0];
             IPEndPoint endpoint = new IPEndPoint(ipAddr, 7777);
 
-            _listener.Init(endpoint, () => { return new GameSession(); });
+            _listener.Init(endpoint, () => { return new ClientSession(); });
             Console.WriteLine($"Listening...");
 
             try
