@@ -13,26 +13,36 @@ namespace Server
     class Program
     {
         static Listener _listener = new Listener();
+        public static GameRoom Room = new GameRoom();
+
+        static void FlushRoom()
+        {
+            Room.Push(() =>
+            {
+                Room.Flush();
+            });
+            JobTimer.Instance.Push(FlushRoom, 250);
+        }
 
         static void Main(string[] args)
         {
-            // 사용할 패킷들을 저장합니다.
-            PacketManager.Instance.Register();
-
             // DNS 서버를 가지고 옵니다.
             string host = Dns.GetHostName();
             IPHostEntry ipHost = Dns.GetHostEntry(host);
             IPAddress ipAddr = ipHost.AddressList[0];
             IPEndPoint endpoint = new IPEndPoint(ipAddr, 7777);
 
-            _listener.Init(endpoint, () => { return new ClientSession(); });
+            _listener.Init(endpoint, () => { return SessionManager.Instance.Generate(); });
             Console.WriteLine($"Listening...");
+
+
+            FlushRoom();
 
             try
             {
                 while (true)
                 {
-
+                    JobTimer.Instance.Flush();
                 }
             }
             catch (Exception e)

@@ -19,13 +19,18 @@ class PacketManager
         }
     }
 
+    PacketManager()
+    {
+        Register();
+    }
+
     Dictionary<ushort, Action<PacketSession, ArraySegment<byte>>> _onRecv = new Dictionary<ushort, Action<PacketSession, ArraySegment<byte>>>();
     Dictionary<ushort, Action<PacketSession, IPacket>> _handler = new Dictionary<ushort, Action<PacketSession, IPacket>>();
 
     public void Register()
     {
-        _onRecv.Add((ushort)PacketID.S_Test, MakePacket<S_Test>);
-_handler.Add((ushort)PacketID.S_Test, PacketHandler.S_TestHandler);
+        _onRecv.Add((ushort)PacketID.S_Chat, MakePacket<S_Chat>);
+_handler.Add((ushort)PacketID.S_Chat, PacketHandler.S_ChatHandler);
 
 
     }

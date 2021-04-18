@@ -12,26 +12,17 @@ namespace Server
 {
     class ClientSession : PacketSession
     {
+        public int SessionId { get; set; }
+        public GameRoom Room { get; set; }
+
         public override void OnConnected(EndPoint endPoint)
         {
             Console.WriteLine($"OnCennected {endPoint}");
 
-            //Packet packet = new Packet() { size = 100, packetid = 10 };
-
-            //ArraySegment<byte> openSegment = SendBufferHelper.Open(4096);
-            //byte[] Buffer = BitConverter.GetBytes(packet.size); //Encoding.UTF8.GetBytes("Welcome to MMORPG Server !");
-            //byte[] Buffer2 = BitConverter.GetBytes(packet.packetid);//Encoding.UTF8.GetBytes("Hello Server !");
-
-            //Array.Copy(Buffer, 0, openSegment.Array, openSegment.Offset, Buffer.Length);
-            //Array.Copy(Buffer2, 0, openSegment.Array, openSegment.Offset + Buffer.Length, Buffer2.Length);
-
-            //ArraySegment<byte> sendBuff = SendBufferHelper.Close(Buffer.Length + Buffer2.Length);
-
-            //Send(sendBuff);
-
-            Thread.Sleep(5000);
-
-            Disconnect();
+            Program.Room.Push(() =>
+            {
+                Program.Room.Enter(this);
+            });
         }
 
         public override void OnRecvPacket(ArraySegment<byte> _buffer)
@@ -46,6 +37,17 @@ namespace Server
 
         public override void OnDisconnected(EndPoint endPoint)
         {
+            SessionManager.Instance.Remove(this);
+            if(Room != null)
+            {
+                GameRoom room = Room;
+                room.Push(() =>
+                {
+                    room.Leave(this);
+                });
+                Room = null;
+            }
+
             Console.WriteLine($"OnDisconnected {endPoint}");
         }
     }

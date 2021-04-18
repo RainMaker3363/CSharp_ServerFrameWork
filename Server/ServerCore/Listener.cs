@@ -11,7 +11,7 @@ namespace ServerCore
         Socket _ListenSocket;
         Func<Session> _SessionFactory;
 
-        public void Init(IPEndPoint endPoint, Func<Session> sessionFact)
+        public void Init(IPEndPoint endPoint, Func<Session> sessionFact, int register = 10, int backlog = 100)
         {
             _ListenSocket = new Socket(endPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
             _SessionFactory += sessionFact;
@@ -19,11 +19,14 @@ namespace ServerCore
             _ListenSocket.Bind(endPoint);
 
             // backlog : 최대 대기수!
-            _ListenSocket.Listen(10);
+            _ListenSocket.Listen(backlog);
 
-            SocketAsyncEventArgs args = new SocketAsyncEventArgs();
-            args.Completed += new EventHandler<SocketAsyncEventArgs>(OnAcceptCompleted);
-            RegisterAccept(args);
+            for(int i = 0; i< register; ++i)
+            {
+                SocketAsyncEventArgs args = new SocketAsyncEventArgs();
+                args.Completed += new EventHandler<SocketAsyncEventArgs>(OnAcceptCompleted);
+                RegisterAccept(args);
+            }
         }
 
         void RegisterAccept(SocketAsyncEventArgs args)

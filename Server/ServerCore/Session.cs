@@ -15,6 +15,7 @@ namespace ServerCore
         public sealed override int OnRecv(ArraySegment<byte> _buffer)
         {
             int processLen = 0;
+            int packetCount = 0;
 
             while(true)
             {
@@ -29,10 +30,14 @@ namespace ServerCore
 
                 // 여기가지 왔으면 패킷 조립
                 OnRecvPacket(new ArraySegment<byte>(_buffer.Array, _buffer.Offset, dataSize));
+                packetCount++;
 
                 processLen += dataSize;
                 _buffer = new ArraySegment<byte>(_buffer.Array, _buffer.Offset + dataSize, _buffer.Count - dataSize);
             }
+
+            if (packetCount > 1)
+                Console.WriteLine($"패킷 모아 보내기 : {packetCount}");
 
             return processLen;
         }
@@ -46,7 +51,7 @@ namespace ServerCore
         int _disconnect = 0;
 
         // Recv 버퍼
-        RecvBuffer _recvBuffer = new RecvBuffer(1024);
+        RecvBuffer _recvBuffer = new RecvBuffer(65535);
 
         object _lock = new object();
         Queue<ArraySegment<byte>> _sendQueue = new Queue<ArraySegment<byte>>();
@@ -62,6 +67,15 @@ namespace ServerCore
         public abstract void OnSend(int numOfByte);
         public abstract void OnDisconnected(EndPoint endPoint);
 
+        void Clear()
+        {
+            lock(_lock)
+            {
+                _sendQueue.Clear();
+                pendingList.Clear();
+            }
+        }
+
 
         public void Start(Socket socket)
         {
@@ -71,6 +85,25 @@ namespace ServerCore
             sendArgs.Completed += new EventHandler<SocketAsyncEventArgs>(OnSendCompleted);
 
             RegisterRecv();
+        }
+
+        public void Send(List<ArraySegment<byte>> sendBuffList)
+        {
+            if (sendBuffList.Count <= 0)
+                return;
+
+            lock (_lock)
+            {
+                foreach(ArraySegment<byte> sendBuff in sendBuffList)
+                {
+                    _sendQueue.Enqueue(sendBuff);
+                }
+                
+                if (pendingList.Count <= 0)
+                {
+                    RegisterSend();
+                }
+            }
         }
 
         public void Send(ArraySegment<byte> sendBuff)
@@ -94,12 +127,17 @@ namespace ServerCore
 
             _socket.Shutdown(SocketShutdown.Both);
             _socket.Close();
+
+            Clear();
         }
 
         #region 네트워크 통신
 
         void RegisterSend()
         {
+            if (_disconnect == 1)
+                return;
+
             pendingList.Clear();
             while (_sendQueue.Count > 0)
             {
@@ -112,9 +150,16 @@ namespace ServerCore
 
             sendArgs.BufferList = pendingList;
 
-            bool pending = _socket.SendAsync(sendArgs);
-            if (pending == false)
-                OnSendCompleted(null, sendArgs);
+            try
+            {
+                bool pending = _socket.SendAsync(sendArgs);
+                if (pending == false)
+                    OnSendCompleted(null, sendArgs);
+            }
+            catch(Exception e)
+            {
+                Console.WriteLine($"RegisterSend Failed : {e.Message}");
+            }
         }
 
         void OnSendCompleted(object sender, SocketAsyncEventArgs args)
@@ -154,16 +199,27 @@ namespace ServerCore
 
         void RegisterRecv()
         {
+            if (_disconnect == 1)
+                return;
+
             _recvBuffer.Clean();
             ArraySegment<byte> segment = _recvBuffer.WriteSegment;
 
             recvArgs.SetBuffer(segment.Array, segment.Offset, segment.Count);
 
-            bool pending = _socket.ReceiveAsync(recvArgs);
-            if(pending == false)
+            try
             {
-                OnRecvCompleted(null, recvArgs);
+                bool pending = _socket.ReceiveAsync(recvArgs);
+                if (pending == false)
+                {
+                    OnRecvCompleted(null, recvArgs);
+                }
             }
+            catch(Exception e)
+            {
+                Console.WriteLine($"RegisterRecv Failed {e}");
+            }
+
         }
 
         void OnRecvCompleted(object sender, SocketAsyncEventArgs args)

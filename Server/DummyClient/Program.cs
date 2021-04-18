@@ -19,21 +19,23 @@ namespace DummyClient
             IPEndPoint endpoint = new IPEndPoint(ipAddr, 7777);
 
             Connector connector = new Connector();
-            connector.Connect(endpoint, () => { return new ServerSession(); });
+            connector.Connect(endpoint,
+                () => { return SessionManager.Instance.Generate(); },
+                500);
 
             while(true)
             {
 
                 try
                 {
-
+                    SessionManager.Instance.SendForEach();
                 }
                 catch (Exception e)
                 {
                     Console.WriteLine(e.ToString());
                 }
 
-                Thread.Sleep(1000);
+                Thread.Sleep(250);
             }
 
         }
